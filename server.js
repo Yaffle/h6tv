@@ -104,9 +104,9 @@ function work() {
   */
   results.sort(function (a, b) {
     if (a.votes === b.votes) {
-      return a.worksNow && b.worksNow ? 0 /* ?? не должно быть 0 */ : (a.worksNow ? 1 : -1);
+      return a.worksNow && b.worksNow ? 0 /* ?? не должно быть 0 */ : (a.worksNow ? -1 : 1);
     }
-    return a.votes - b.votes;
+    return b.votes - a.votes;
   });
   
   // делаем из results массив ссылок
