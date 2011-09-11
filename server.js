@@ -39,6 +39,7 @@ var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
 var launchedVLC = [];
 var userVotes = []; // uid, url, timeStamp
 var lifeTime = 30000;//?
+var vlcLimit = 6;
 
 var counter = 0;
 
@@ -72,7 +73,7 @@ function work() {
     return x.url;
   });
 
-  results = results.slice(0, 4);// оставляем первые 4!
+  results = results.slice(0, vlcLimit);//!
 
 
   // ненужные выключаем
@@ -88,7 +89,7 @@ function work() {
   });
 
   // results содержит VLC
-  while (launchedVLC.length < 4 && results.length) {
+  while (launchedVLC.length < vlcLimit && results.length) {
     var y = {
       process: null,
       url: results.pop(),
@@ -99,7 +100,7 @@ function work() {
     launchedVLC.push(y);
     (function (y) {
       sys.puts('launching vlc with url: ' + y.url);
-      y.process = spawn('cvlc', ['--http-caching=1200', '--sout=#transcode{vc=h264,vb=256,scale=0.5,ac=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
+      y.process = spawn('cvlc', ['--http-caching=1200', '--sout=#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
       y.process.on('exit', function (code) {
         var r = launchedVLC.indexOf(y);
         if (r !== -1) {
