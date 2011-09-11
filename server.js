@@ -38,7 +38,7 @@ var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
 
 var launchedVLC = [];
 var userVotes = []; // uid, url, timeStamp
-var lifeTime = 15000;
+var lifeTime = 30000;//?
 
 var counter = 0;
 
@@ -77,27 +77,29 @@ function work() {
 
   // ненужные выключаем
   launchedVLC = launchedVLC.filter(function (x) {
-    var r = results.indexOf(x.url) !== -1;
-    if (!r) {
+    var r = results.indexOf(x.url);
+    if (r === -1) {
+      sys.puts('kill vlc with url: ' + x.url);
       x.process.kill();
     } else {
       results.splice(r, 1); // удаляем ссылку из массива, т.к. vlc уже запущен, нам не нужен еще один с таким же url
     }
-    return r;
-  })
-  
+    return r !== -1;
+  });
+
   // results содержит VLC
   while (launchedVLC.length < 4 && results.length) {
     var y = {
       process: null,
       url: results.pop(),
-      outputURL: 'http://iptv.hostel6.ru:' + (20000 + counter)
+      outputURL: ':' + (20000 + counter),
+      port: (20000 + counter)
     };
     counter = (counter + 1) % 1000;
     launchedVLC.push(y);
     (function (y) {
       sys.puts('launching vlc with url: ' + y.url);
-      y.process = spawn('ls', ['-lh', '/usr']);
+      y.process = spawn('cvlc', ['--http-caching=1200', '--sout=#transcode{vc=h264,vb=256,scale=0.5,ac=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
       y.process.on('exit', function (code) {
         var r = launchedVLC.indexOf(y);
         if (r !== -1) {
