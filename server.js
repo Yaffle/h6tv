@@ -43,6 +43,33 @@ var vlcLimit = 6;
 
 var counter = 0;
 
+
+
+function vote(url, uid) {
+  var timeStamp = +new Date();
+  var usedUIDs = {};
+  if (url && uid) {
+    userVotes.push({
+      timeStamp: timeStamp,
+      url: url,
+      uid: uid
+    });
+  }
+  // дубли по uid удаляются, обновляется время и url для текущего uid, старые фильтруются
+  userVotes = userVotes.filter(function (x) {
+    if (x.uid === uid) {
+      // update
+      x.timeStamp = timeStamp;
+      x.url = url;
+    }
+    var r = !usedUIDs.hasOwnProperty(x.uid) && (x.timeStamp + lifeTime > timeStamp);
+    usedUIDs[x.uid] = 1;
+    return r;
+  });
+  
+  console.log('userVotes = ' + sys.inspect(userVotes));
+}
+
 // функция подсчета голосов за включение сжатия для каждого url + запуска VLC
 // будем запускать раз в 15 секунд
 function work() {
@@ -64,8 +91,22 @@ function work() {
     c.votes++;
   });
   
+  results.forEach(function (x) {
+    x.worksNow = false;
+    launchedVLC.forEach(function (y) {
+      x.worksNow = x.worksNow || y.url === x.url;
+    });
+  });
+
+  
+  /*
+    сортируем по убыванию желающих посмотреть сжатый поток + приоритет тем потокам, которые уже показываются
+  */
   results.sort(function (a, b) {
-    return a.votes > b.votes;
+    if (a.votes === b.votes) {
+      return a.worksNow && b.worksNow ? 0 /* ?? не должно быть 0 */ : (a.worksNow ? 1 : -1);
+    }
+    return a.votes - b.votes;
   });
   
   // делаем из results массив ссылок
@@ -113,31 +154,6 @@ function work() {
   }
 
   setTimeout(work, 15000);
-}
-
-function vote(url, uid) {
-  var timeStamp = +new Date();
-  var usedUIDs = {};
-  if (url && uid) {
-    userVotes.push({
-      timeStamp: timeStamp,
-      url: url,
-      uid: uid
-    });
-  }
-  // дубли по uid удаляются, обновляется время и url для текущего uid, старые фильтруются
-  userVotes = userVotes.filter(function (x) {
-    if (x.uid === uid) {
-      // update
-      x.timeStamp = timeStamp;
-      x.url = url;
-    }
-    var r = !usedUIDs.hasOwnProperty(x.uid) && (x.timeStamp + lifeTime > timeStamp);
-    usedUIDs[x.uid] = 1;
-    return r;
-  });
-  
-  console.log('userVotes = ' + sys.inspect(userVotes));
 }
 
 work();
