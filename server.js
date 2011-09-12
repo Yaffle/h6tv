@@ -1,3 +1,46 @@
+function Dequeue() {
+  var x = {};
+
+  function insert(tail, next, prev, head) {
+    return function (data) {
+      var item = {
+        data: data
+      };
+      if (x[tail]) {
+        item[prev] = x[tail];
+        x[tail][next] = item;
+      } else {
+        x[head] = item;
+      }
+      x[tail] = item;
+    };
+  }
+
+  function extract(tail, next, prev, head) {
+    return function () {
+      var data;
+      if (x[tail]) {
+        data = x[tail].data;
+        x[tail] = x[tail][prev];
+        if (x[tail]) {
+          x[tail][next] = null;
+        } else {
+          x[head] = null;
+        }
+      }
+      return data;
+    };
+  }
+
+  this.push = insert('tail', 'next', 'prev', 'head');
+  this.unshift = insert('head', 'prev', 'next', 'tail');
+  this.pop = extract('tail', 'next', 'prev', 'head');
+  this.shift = extract('head', 'prev', 'next', 'tail');
+
+  return this;
+}
+
+
 /*
 
 перед тем как отдавать ссылку пользователю в tv1.php
@@ -41,8 +84,14 @@ var userVotes = []; // uid, url, timeStamp
 var lifeTime = 30000;//?
 var vlcLimit = 6;
 
-var counter = 0;
+var freePorts = new Dequeue();/* свободные порты, на которых будут потоки */
 
+(function () {
+  var i;
+  for (i = 20001; i < 20100; i++) {
+    freePorts.push(i);
+  };
+}());
 
 
 function vote(url, uid) {
@@ -123,6 +172,7 @@ function work() {
     if (r === -1) {
       sys.puts('kill vlc with url: ' + x.url);
       x.process.kill();
+      freePorts.unshift(x.port);//!? нужно ли освобождать здесь? в on('exit') уже, тем более здесь порт еще не свободен
     } else {
       results.splice(r, 1); // удаляем ссылку из массива, т.к. vlc уже запущен, нам не нужен еще один с таким же url
     }
@@ -133,11 +183,10 @@ function work() {
   while (launchedVLC.length < vlcLimit && results.length) {
     var y = {
       process: null,
-      url: results.pop(),
-      outputURL: ':' + (20000 + counter),
-      port: (20000 + counter)
+      url: results.pop()
     };
-    counter = (counter + 1) % 1000;
+    y.port = freePorts.pop();
+    y.outputURL = ':' + y.port;
     launchedVLC.push(y);
     (function (y) {
       sys.puts('launching vlc with url: ' + y.url);
@@ -146,6 +195,7 @@ function work() {
         var r = launchedVLC.indexOf(y);
         if (r !== -1) {
           launchedVLC.splice(r, 1);//удаляем из массива запущенных
+          freePorts.unshift(y.port);
         }
         console.log('child process exited with code ' + code);
       });
