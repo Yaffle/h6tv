@@ -1,45 +1,26 @@
-function Dequeue() {
-  var x = {};
+function FIFO() {
+  var head = null;
+      tail = null;
 
-  function insert(tail, next, prev, head) {
-    return function (data) {
-      var item = {
-        data: data
-      };
-      if (x[tail]) {
-        item[prev] = x[tail];
-        x[tail][next] = item;
-      } else {
-        x[head] = item;
-      }
-      x[tail] = item;
+  this.unshift = function (data) {
+    head = {
+      data: data,
+      next: head
     };
-  }
+    (head.next || {}).prev = head;
+    tail = tail || head;
+  };
 
-  function extract(tail, next, prev, head) {
-    return function () {
-      var data;
-      if (x[tail]) {
-        data = x[tail].data;
-        x[tail] = x[tail][prev];
-        if (x[tail]) {
-          x[tail][next] = null;
-        } else {
-          x[head] = null;
-        }
-      }
-      return data;
-    };
-  }
-
-  this.push = insert('tail', 'next', 'prev', 'head');
-  this.unshift = insert('head', 'prev', 'next', 'tail');
-  this.pop = extract('tail', 'next', 'prev', 'head');
-  this.shift = extract('head', 'prev', 'next', 'tail');
+  this.pop = function () {
+    var item = tail || {};
+    tail = item.prev;
+    (item.prev || {}).next = null;
+    head = tail && head;
+    return item.data;
+  };
 
   return this;
 }
-
 
 /*
 
@@ -84,12 +65,12 @@ var userVotes = []; // uid, url, timeStamp
 var lifeTime = 30000;//?
 var vlcLimit = 6;
 
-var freePorts = new Dequeue();/* свободные порты, на которых будут потоки */
+var freePorts = new FIFO();/* свободные порты, на которых будут потоки */
 
 (function () {
   var i;
   for (i = 20001; i < 20100; i++) {
-    freePorts.push(i);
+    freePorts.unshift(i);
   };
 }());
 
