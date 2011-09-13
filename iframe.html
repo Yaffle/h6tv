@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>eventsource for h6tv</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <script src="eventsource.js"></script>
+  <script>
+    var es = new EventSource('/events');
+    es.addEventListener('message', function (event) {
+      if (window.parent !== window) {
+        window.parent.postMessage(event.data, '*');
+      }
+    }, false);
+  </script>
+</head>
+<body>
+</body>
+</html>

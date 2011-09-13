@@ -168,6 +168,20 @@ function work() {
 
 var unvoteTimers = {};
 http.createServer(function (request, response) {
+
+
+  if (request.url === '/iframe.html') {
+    response.writeHead(200, {'Content-Type': 'text/html'});
+    response.end(fs.readFileSync(__dirname + '/iframe.html', 'utf8'));
+    return;
+  }
+  
+  if (request.url === '/eventsource.js') {
+    response.writeHead(200, {'Content-Type': 'text/javascript'});
+    response.end(fs.readFileSync(__dirname + '/eventsource.js', 'utf8'));
+    return;
+  }
+
   if (request.url === '/events') {
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
