@@ -1,5 +1,7 @@
+/*jslint sloppy: true, white: true, plusplus: true, maxerr: 50, indent: 2 */
+
 function FIFO() {
-  var head = null;
+  var head = null,
       tail = null;
 
   this.unshift = function (data) {
@@ -61,7 +63,7 @@ var emitter = new EventEmitter();
 var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
 
 var launchedVLC = [];
-var userVotes = []; // uid, url, timeStamp
+var userVotes = {}; // uid => url
 var lifeTime = 30000;//?
 var vlcLimit = 6;
 
@@ -71,56 +73,30 @@ var freePorts = new FIFO();/* свободные порты, на которых
   var i;
   for (i = 20001; i < 20100; i++) {
     freePorts.unshift(i);
-  };
+  }
 }());
 
-
-function vote(url, uid) {
-  var timeStamp = +new Date();
-  var usedUIDs = {};
-  if (url && uid) {
-    userVotes.push({
-      timeStamp: timeStamp,
-      url: url,
-      uid: uid
-    });
-  }
-  // дубли по uid удаляются, обновляется время и url для текущего uid, старые фильтруются
-  userVotes = userVotes.filter(function (x) {
-    if (x.uid === uid) {
-      // update
-      x.timeStamp = timeStamp;
-      x.url = url;
-    }
-    var r = !usedUIDs.hasOwnProperty(x.uid) && (x.timeStamp + lifeTime > timeStamp);
-    usedUIDs[x.uid] = 1;
-    return r;
-  });
-  
-  console.log('userVotes = ' + sys.inspect(userVotes));
-}
 
 // функция подсчета голосов за включение сжатия для каждого url + запуска VLC
 // будем запускать раз в 15 секунд
 function work() {
 
-  vote();
-   
   var results = []; // results[i] = url + кол-во голосов
-  userVotes.forEach(function (vote) {
+  Object.keys(userVotes).forEach(function (vote) {
+    var url = userVotes[vote];
     var c = results.filter(function (r) {
-      return r.url === vote.url;
+      return r.url === url;
     })[0];
     if (!c) {
       c = {
-        url: vote.url,
+        url: url,
         votes: 0
       };
       results[results.length] = c;
     }
     c.votes++;
   });
-  
+
   results.forEach(function (x) {
     x.worksNow = false;
     launchedVLC.forEach(function (y) {
@@ -153,6 +129,7 @@ function work() {
     if (r === -1) {
       sys.puts('kill vlc with url: ' + x.url);
       x.process.kill();
+      emitter.emit('vlcEvent', {url: x.url, outputURL: x.outputURL, close: 1});
       freePorts.unshift(x.port);//!? нужно ли освобождать здесь? в on('exit') уже, тем более здесь порт еще не свободен
     } else {
       results.splice(r, 1); // удаляем ссылку из массива, т.к. vlc уже запущен, нам не нужен еще один с таким же url
@@ -172,10 +149,12 @@ function work() {
     (function (y) {
       sys.puts('launching vlc with url: ' + y.url);
       y.process = spawn('cvlc', ['--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
+      emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
       y.process.on('exit', function (code) {
         var r = launchedVLC.indexOf(y);
         if (r !== -1) {
           launchedVLC.splice(r, 1);//удаляем из массива запущенных
+          emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL, close: 1});
           freePorts.unshift(y.port);
         }
         console.log('child process exited with code ' + code);
@@ -184,12 +163,35 @@ function work() {
 
   }
 
-  setTimeout(work, 15000);
 }
 
-work();
 
+var unvoteTimers = {};
 http.createServer(function (request, response) {
+  if (request.url === '/events') {
+    function sendMessages(data) {
+      response.write('data: ' + JSON.stringify(data) + '\n\n');
+    }
+    response.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
+      'Access-Control-Max-Age': '8640'
+    });
+    // 2 kb comment message for XDomainRequest
+    response.write(':' + Array(2049).join(' ') + '\n');
+    emitter.addListener('vlcEvent', sendMessages);
+    emitter.setMaxListeners(0);
+    response.socket.on('close', function () {
+      emitter.removeListener('vlcEvent', sendMessages);
+      response.end();
+    });
+    return;
+  }
+
   var q = require('url').parse(request.url, true);
 
   if (q.query.secret !== secret) {
@@ -201,7 +203,18 @@ http.createServer(function (request, response) {
   var url = q.query.url;
   var uid = q.query.uid;
 
-  vote(url, uid);
+  userVotes[uid] = url;
+  console.log('userVotes = ' + sys.inspect(userVotes));
+  setTimeout(work, 1);
+
+  if (unvoteTimers.hasOwnProperty(uid)) {
+    clearTimeout(unvoteTimers[uid]);
+  }
+  unvoteTimers[uid] = setTimeout(function () {
+    unvoteTimers[uid] = null;
+    delete userVotes[uid];
+    setTimeout(work, 1);
+  }, lifeTime);
 
   response.writeHead(200, {'Content-Type': 'text/html'});
   var s = launchedVLC.filter(function (r) {
