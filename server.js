@@ -197,6 +197,9 @@ http.createServer(function (request, response) {
     });
     // 2 kb comment message for XDomainRequest
     response.write(':' + Array(2049).join(' ') + '\n');
+    launchedVLC.forEach(function (x) {
+      sendMessages({url: x.url, outputURL: x.outputURL});
+    });
     emitter.addListener('vlcEvent', sendMessages);
     emitter.setMaxListeners(0);
     response.socket.on('close', function () {
