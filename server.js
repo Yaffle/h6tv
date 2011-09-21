@@ -64,7 +64,7 @@ function startVLC(streamURL) {
   launchedVLC.push(y);
 
   sys.puts('launching vlc with url: ' + y.url);
-  y.process = spawn('cvlc', ['--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
+  y.process = spawn('cvlc', ['--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}','vlc://quit', y.url]);
   emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
   y.process.on('exit', function (code) {
     var r = launchedVLC.indexOf(y);
