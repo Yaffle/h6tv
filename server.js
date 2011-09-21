@@ -1,28 +1,5 @@
 /*jslint sloppy: true, white: true, plusplus: true, maxerr: 50, indent: 2 */
 
-function FIFO() {
-  var head = null,
-      tail = null;
-
-  this.unshift = function (data) {
-    head = {
-      data: data,
-      next: head
-    };
-    (head.next || {}).prev = head;
-    tail = tail || head;
-  };
-
-  this.pop = function () {
-    var item = tail || {};
-    tail = item.prev;
-    (item.prev || {}).next = null;
-    head = tail && head;
-    return item.data;
-  };
-
-  return this;
-}
 
 /*
 
@@ -67,14 +44,14 @@ var userVotes = {}; // uid => url
 var lifeTime = 30000;//?
 var vlcLimit = 6;
 
-var freePorts = new FIFO();/* свободные порты, на которых будут потоки */
-
-(function () {
-  var i;
-  for (i = 20001; i < 20100; i++) {
-    freePorts.unshift(i);
+/* свободные порты, на которых будут потоки */
+var freePorts = (function (x, i) {
+  for (i = 20000; i < 20100; i++) {
+    x.push(i);
   }
-}());
+  return x;
+}([]));
+
 
 
 // функция подсчета голосов за включение сжатия для каждого url + запуска VLC
@@ -129,8 +106,6 @@ function work() {
     if (r === -1) {
       sys.puts('kill vlc with url: ' + x.url);
       x.process.kill();
-      emitter.emit('vlcEvent', {url: x.url, outputURL: x.outputURL, close: 1});
-      freePorts.unshift(x.port);//!? нужно ли освобождать здесь? в on('exit') уже, тем более здесь порт еще не свободен
     } else {
       results.splice(r, 1); // удаляем ссылку из массива, т.к. vlc уже запущен, нам не нужен еще один с таким же url
     }
@@ -155,7 +130,7 @@ function work() {
         if (r !== -1) {
           launchedVLC.splice(r, 1);//удаляем из массива запущенных
           emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL, close: 1});
-          freePorts.unshift(y.port);
+          freePorts.push(y.port);
         }
         console.log('child process exited with code ' + code);
       });
