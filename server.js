@@ -54,89 +54,71 @@ var freePorts = (function (x, i) {
 
 
 
+function startVLC(streamURL) {
+  var y = {
+    process: null,
+    url: streamURL
+  };
+  y.port = freePorts.pop();
+  y.outputURL = ':' + y.port;
+  launchedVLC.push(y);
+
+  sys.puts('launching vlc with url: ' + y.url);
+  y.process = spawn('cvlc', ['--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
+  emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
+  y.process.on('exit', function (code) {
+    var r = launchedVLC.indexOf(y);
+    if (r !== -1) {
+      launchedVLC.splice(r, 1);//удаляем из массива запущенных
+      emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL, close: 1});
+      freePorts.push(y.port);
+    }
+    console.log('child process exited with code ' + code);
+  });
+}
+
+
 // функция подсчета голосов за включение сжатия для каждого url + запуска VLC
 // будем запускать раз в 15 секунд
 function work() {
 
-  var results = []; // results[i] = url + кол-во голосов
-  Object.keys(userVotes).forEach(function (vote) {
-    var url = userVotes[vote];
-    var c = results.filter(function (r) {
-      return r.url === url;
-    })[0];
-    if (!c) {
-      c = {
+  var results = [],  // results[i] = url + кол-во голосов
+      tmp = {};
+  Object.keys(userVotes).forEach(function (uid) {
+    var url = userVotes[uid],
+        x = tmp[url];
+    if (!x) {
+      x = {
+        votes: 0,
         url: url,
-        votes: 0
+        // child process or undefined if there is no process
+        vlc: launchedVLC.filter(function (x) {
+          return x.url == url;
+        })[0]
       };
-      results[results.length] = c;
+      tmp[url] = x;
+      results.push(x);
     }
-    c.votes++;
+    x.votes++;
   });
 
-  results.forEach(function (x) {
-    x.worksNow = false;
-    launchedVLC.forEach(function (y) {
-      x.worksNow = x.worksNow || y.url === x.url;
-    });
-  });
-
-  
   /*
     сортируем по убыванию желающих посмотреть сжатый поток + приоритет тем потокам, которые уже показываются
   */
   results.sort(function (a, b) {
-    if (a.votes === b.votes) {
-      return a.worksNow && b.worksNow ? 0 /* ?? не должно быть 0 */ : (a.worksNow ? -1 : 1);
-    }
-    return b.votes - a.votes;
-  });
-  
-  // делаем из results массив ссылок
-  results = results.map(function (x) {
-    return x.url;
+    return b.votes - a.votes ? b.votes - a.votes : (a.vlc ? (b.vlc ? 0 : -1) : 1);
   });
 
-  results = results.slice(0, vlcLimit);//!
-
-
-  // ненужные выключаем
-  launchedVLC = launchedVLC.filter(function (x) {
-    var r = results.indexOf(x.url);
-    if (r === -1) {
+  results.forEach(function (x, index) {
+    var play = index < vlcLimit;
+    if (x.vlc && !play) {
       sys.puts('kill vlc with url: ' + x.url);
-      x.process.kill();
-    } else {
-      results.splice(r, 1); // удаляем ссылку из массива, т.к. vlc уже запущен, нам не нужен еще один с таким же url
+      x.vlc.process.kill();
     }
-    return r !== -1;
+    if (!x.vlc && play) {
+      startVLC(x.url);
+    }
   });
-
-  // results содержит VLC
-  while (launchedVLC.length < vlcLimit && results.length) {
-    var y = {
-      process: null,
-      url: results.pop()
-    };
-    y.port = freePorts.pop();
-    y.outputURL = ':' + y.port;
-    launchedVLC.push(y);
-    (function (y) {
-      sys.puts('launching vlc with url: ' + y.url);
-      y.process = spawn('cvlc', ['--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
-      emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
-      y.process.on('exit', function (code) {
-        var r = launchedVLC.indexOf(y);
-        if (r !== -1) {
-          launchedVLC.splice(r, 1);//удаляем из массива запущенных
-          emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL, close: 1});
-          freePorts.push(y.port);
-        }
-        console.log('child process exited with code ' + code);
-      });
-    }(y));
-
-  }
 
 }
 
