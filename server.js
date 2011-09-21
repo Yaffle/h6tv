@@ -228,7 +228,7 @@ http.createServer(function (request, response) {
     clearTimeout(unvoteTimers[uid]);
   }
   unvoteTimers[uid] = setTimeout(function () {
-    unvoteTimers[uid] = null;
+    delete unvoteTimers[uid];
     delete userVotes[uid];
     setTimeout(work, 1);
   }, lifeTime);
