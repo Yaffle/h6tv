@@ -38,7 +38,7 @@ var Cookie = {
       if (es) { //?
         es.close();
       }
-      es = new EventSource('/events/' + decodeURIComponent(streamURL) '/' + wantsCompressed);
+      es = new EventSource('/events?streamURL=' + decodeURIComponent(streamURL) '&wantsCompressed=' + wantsCompressed);
       es.addEventListener('message', function (event) {
         window.parent.postMessage(event.data, '*');
       }, false);
