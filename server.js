@@ -100,6 +100,13 @@ function work() {
 
   var results = [],  // results[i] = url + кол-во голосов
       tmp = {};
+      
+// Добавляем уже запущенные потоки !!! (иначе не удалятся)
+  var prefix = '~~';
+  launchedVLC.forEach(function (x) {
+    userVotes[prefix + x.url] = x.url;
+  });
+
   Object.keys(userVotes).forEach(function (uid) {
     var url = userVotes[uid],
         x = tmp[url];
@@ -115,7 +122,9 @@ function work() {
       tmp[url] = x;
       results.push(x);
     }
-    x.votes++;
+    if (uid.indexOf(prefix) !== 0) {
+      x.votes++;
+    }
   });
 
   /*
