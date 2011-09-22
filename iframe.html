@@ -6,15 +6,19 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <script src="eventsource.js"></script>
   <script>
-    var parentOrigin = '';
+
+var Cookie = {
+  setItem: function (name, value) {
+    value = String(value);
+	document.cookie = encodeURIComponent(name) + "=" + encodeURIComponent(value) + "; expires=" + (new Date(+(new Date()) + 15552000000)).toUTCString() + "; path=/";
+	return value; 
+  }
+};
+
     var es = null;
 
-    try {
-      parentOrigin = window.parent.location.protocol + '//' + window.parent.location.host;
-    } catch (e) {}
-
     window.addEventListener('message', function (event) {
-      if (event.origin !== parentOrigin) {
+      if (event.origin !== 'http://hostel6.ru') {
         return;
       }
       var x = null;
@@ -26,8 +30,8 @@
         return;
       }
 
-      // Cookie.setItem('kuid', kuid)
-      // Cookie.setItem('secondpass', secondpass)
+      Cookie.setItem('kuid', x.kuid);
+      Cookie.setItem('secondpass', x.secondpass);
       var streamURL = x.streamURL
       var wantsCompressed = x.wantsCompressed ? 1 : 0;
 
