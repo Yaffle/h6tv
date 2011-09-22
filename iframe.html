@@ -6,12 +6,42 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <script src="eventsource.js"></script>
   <script>
-    var es = new EventSource('/events');
-    es.addEventListener('message', function (event) {
-      if (window.parent !== window) {
-        window.parent.postMessage(event.data, '*');
+/*
+родительское окно должно передать сообщение с токеном для начала соединения,
+а также затем передавать сообщение с токеном по запросу
+*/  
+  
+    var token = '';
+    var parentOrigin = '';
+    var es = null;
+
+    try {
+      parentOrigin = window.parent.location.protocol + '//' + window.parent.location.host;
+    } catch (e) {}
+
+    window.addEventListener('message', function (event) {
+      if (event.origin !== parentOrigin) {
+        return;
       }
+      token = event.data;
+
+      if (es) { //?
+        es.close();
+      }
+      es = new EventSource('/events/' + token);
+      es.addEventListener('message', function (event) {
+        if (window.parent !== window) {
+          window.parent.postMessage(event.data, '*');
+        }
+      }, false);
+      es.addEventListener('close', function () {
+        es.close();
+        setTimeout(function () {
+          window.parent.postMessage('getToken', '*');
+        }, 3000);//! 3 second ???
+      }, false);
     }, false);
+
   </script>
 </head>
 <body>
