@@ -71,7 +71,16 @@ function startVLC(streamURL) {
   launchedVLC.push(y);
 
   sys.puts('launching vlc with url: ' + y.url);
-  y.process = spawn('cvlc', ['--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url]);
+
+  y.process = spawn('cvlc', [
+    '--http-caching=1200',
+    '--sout-http-mime=video/mpeg',
+    '--sout',
+    '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}',
+    y.url,
+    'vlc://quit'
+  ]);
+
   emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
   y.process.on('exit', function (code) {
     var r = launchedVLC.indexOf(y);
@@ -113,7 +122,7 @@ function work() {
     сортируем по убыванию желающих посмотреть сжатый поток + приоритет тем потокам, которые уже показываются
   */
   results.sort(function (a, b) {
-    return b.votes - a.votes ? b.votes - a.votes : (a.vlc ? (b.vlc ? 0 : -1) : 1);
+    return (b.votes + 0.5 * (b.vlc ? 1 : 0)) - (a.votes + 0.5 * (a.vlc ? 1 : 0));
   });
 
   results.forEach(function (x, index) {
