@@ -6,12 +6,6 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <script src="eventsource.js"></script>
   <script>
-/*
-родительское окно должно передать сообщение с токеном для начала соединения,
-а также затем передавать сообщение с токеном по запросу
-*/  
-  
-    var token = '';
     var parentOrigin = '';
     var es = null;
 
@@ -23,22 +17,26 @@
       if (event.origin !== parentOrigin) {
         return;
       }
-      token = event.data;
+      var x = null;
+      try {
+        x = JSON.parse(event.data);
+      } catch (e) {
+      }
+      if (!x || !x.streamURL) {
+        return;
+      }
+
+      // Cookie.setItem('kuid', kuid)
+      // Cookie.setItem('secondpass', secondpass)
+      var streamURL = x.streamURL
+      var wantsCompressed = x.wantsCompressed ? 1 : 0;
 
       if (es) { //?
         es.close();
       }
-      es = new EventSource('/events/' + token);
+      es = new EventSource('/events/' + decodeURIComponent(streamURL) '/' + wantsCompressed);
       es.addEventListener('message', function (event) {
-        if (window.parent !== window) {
-          window.parent.postMessage(event.data, '*');
-        }
-      }, false);
-      es.addEventListener('close', function () {
-        es.close();
-        setTimeout(function () {
-          window.parent.postMessage('getToken', '*');
-        }, 3000);//! 3 second ???
+        window.parent.postMessage(event.data, '*');
       }, false);
     }, false);
 
