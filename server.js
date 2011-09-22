@@ -154,7 +154,7 @@ function work() {
 
 var unvoteTimers = {};
 http.createServer(function (request, response) {
-
+  var q = require('url').parse(request.url, true);
 
   if (request.url === '/iframe.html') {
     response.writeHead(200, {'Content-Type': 'text/html'});
@@ -168,7 +168,22 @@ http.createServer(function (request, response) {
     return;
   }
 
-  if (request.url === '/events') {
+  if (request.url.indexOf('/events') === 0) {
+    var streamURL = q.query.streamURL;
+    var wantsCompressed = q.query.wantsCompressed;
+    var uid = getUser(cookies);
+    if (!uid) {
+      response.writeHead(403, {});//!
+      response.end();
+      return;
+    }
+    userVotes[uid] = streamURL;
+    console.log('userVotes = ' + sys.inspect(userVotes));
+    setTimeout(work, 1);
+    if (unvoteTimers.hasOwnProperty(uid)) {
+      clearTimeout(unvoteTimers[uid]);
+    }
+
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
     }
@@ -182,7 +197,7 @@ http.createServer(function (request, response) {
       'Access-Control-Max-Age': '8640'
     });
     // 2 kb comment message for XDomainRequest
-    response.write(':' + Array(2049).join(' ') + '\n');
+    response.write(':' + Array(2049).join(' ') + '\n');    
     launchedVLC.forEach(function (x) {
       sendMessages({url: x.url, outputURL: x.outputURL});
     });
@@ -191,40 +206,17 @@ http.createServer(function (request, response) {
     response.socket.on('close', function () {
       emitter.removeListener('vlcEvent', sendMessages);
       response.end();
+      unvoteTimers[uid] = setTimeout(function () {
+        delete unvoteTimers[uid];
+        delete userVotes[uid];
+        setTimeout(work, 1);
+      }, 3000);//lifeTime
     });
     return;
   }
 
-  var q = require('url').parse(request.url, true);
-
-  if (q.query.secret !== secret) {
-    response.writeHead(403, {'Content-Type': 'text/html'});
-    response.end('нет доступа');
-    return;
-  }
-
-  var url = q.query.url;
-  var uid = q.query.uid;
-
-  userVotes[uid] = url;
-  console.log('userVotes = ' + sys.inspect(userVotes));
-  setTimeout(work, 1);
-
-  if (unvoteTimers.hasOwnProperty(uid)) {
-    clearTimeout(unvoteTimers[uid]);
-  }
-  unvoteTimers[uid] = setTimeout(function () {
-    delete unvoteTimers[uid];
-    delete userVotes[uid];
-    setTimeout(work, 1);
-  }, lifeTime);
-
-  response.writeHead(200, {'Content-Type': 'text/html'});
-  var s = launchedVLC.filter(function (r) {
-    return r.url === url;
-  })[0];
-  response.write(s ? s.outputURL : '');
-  response.end();
+  response.writeHead(404, {'Content-Type': 'text/html'});
+  response.end('?');
 }).listen(8003);
 
 
