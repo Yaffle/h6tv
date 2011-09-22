@@ -127,6 +127,10 @@ function work() {
     }
   });
 
+  launchedVLC.forEach(function (x) {
+    delete userVotes[prefix + x.url];
+  });
+
   /*
     сортируем по убыванию желающих посмотреть сжатый поток + приоритет тем потокам, которые уже показываются
   */
