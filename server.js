@@ -152,6 +152,38 @@ function work() {
 }
 
 
+
+var config = '';
+try {
+  config = JSON.pasre(fs.readFileSync(__dirname + '/config.txt', 'utf8'));
+} catch (e) {}
+
+function mysqlEscape(st) {//needs test
+  //return String(st); //!
+  //backslashes  for  following characters: \x00, \n, \r, \, ', " and \x1a. 
+  return String(st).replace(/[\x00\n\r\\'"\x1a]/g, '\\$&');
+}
+
+function login(kuid, secondpass, callback) {
+  var db = require('mysql-native').createTCPClient('hostel6.ru:3306');
+  db.auto_prepare = true;
+  db.auth(config.dbName, config.dbUser, config.dbPassword);
+
+  db.query("SET CHARACTER SET utf8");
+  db.query("SET NAMES utf8");
+  db.query("SET CHARACTER_SET_RESULTS=utf8");
+
+  var qr = "SELECT uid FROM kpro_user LEFT JOIN kpro_usergroup USING (ugroup) WHERE ( uid='" + mysqlEscape(kuid) + "' AND secondpass=MD5('" + mysqlEscape((secondpass)) + "') ) LIMIT 1";
+  var rowsCount = 0;
+
+  db.query(qr).addListener('row', function (r) {
+    rowsCount++;
+  }).addListener('end', function () {
+    db.close();
+    callback(rowsCount);
+  });
+}
+
 var unvoteTimers = {};
 http.createServer(function (request, response) {
   var q = require('url').parse(request.url, true);
@@ -171,47 +203,64 @@ http.createServer(function (request, response) {
   if (request.url.indexOf('/events') === 0) {
     var streamURL = q.query.streamURL;
     var wantsCompressed = q.query.wantsCompressed;
-    var uid = getUser(cookies);
-    if (!uid) {
-      response.writeHead(403, {});//!
-      response.end();
-      return;
-    }
-    userVotes[uid] = streamURL;
-    console.log('userVotes = ' + sys.inspect(userVotes));
-    setTimeout(work, 1);
-    if (unvoteTimers.hasOwnProperty(uid)) {
-      clearTimeout(unvoteTimers[uid]);
-    }
+
+    var cookies = {};
+    (req.headers.cookie || '').split(';').forEach(function (cookie) {
+      var parts = cookie.split('=');
+      cookies[decodeURIComponent(parts[0].trim())] = decodeURIComponent((parts[1] || '').trim());
+    });
+
+    var closed = false;
+    response.socket.on('close', function () {
+      closed = true;//!? может есть какой-то флаг у response текст готовый?
+    });
 
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
     }
-    response.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
-      'Access-Control-Max-Age': '8640'
+
+    login(cookies.kuid, cookies.secondpass || '', function (success) {
+      if (!success || closed) {
+        response.writeHead(403, {});//!
+        response.end();
+        return;
+      }
+
+      userVotes[uid] = streamURL;
+      console.log('userVotes = ' + sys.inspect(userVotes));
+      setTimeout(work, 1);
+      if (unvoteTimers.hasOwnProperty(uid)) {
+        clearTimeout(unvoteTimers[uid]);
+      }
+
+      response.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
+        'Access-Control-Max-Age': '8640'
+      });
+
+      // 2 kb comment message for XDomainRequest
+      response.write(':' + Array(2049).join(' ') + '\n');    
+      launchedVLC.forEach(function (x) {
+        sendMessages({url: x.url, outputURL: x.outputURL});
+      });
+      emitter.addListener('vlcEvent', sendMessages);
+      emitter.setMaxListeners(0);
+      response.socket.on('close', function () {
+        emitter.removeListener('vlcEvent', sendMessages);
+        response.end();
+        unvoteTimers[uid] = setTimeout(function () {
+          delete unvoteTimers[uid];
+          delete userVotes[uid];
+          setTimeout(work, 1);
+        }, 3000);//lifeTime
+      });      
     });
-    // 2 kb comment message for XDomainRequest
-    response.write(':' + Array(2049).join(' ') + '\n');    
-    launchedVLC.forEach(function (x) {
-      sendMessages({url: x.url, outputURL: x.outputURL});
-    });
-    emitter.addListener('vlcEvent', sendMessages);
-    emitter.setMaxListeners(0);
-    response.socket.on('close', function () {
-      emitter.removeListener('vlcEvent', sendMessages);
-      response.end();
-      unvoteTimers[uid] = setTimeout(function () {
-        delete unvoteTimers[uid];
-        delete userVotes[uid];
-        setTimeout(work, 1);
-      }, 3000);//lifeTime
-    });
+
     return;
   }
 
