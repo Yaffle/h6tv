@@ -217,7 +217,7 @@ http.createServer(function (request, response) {
   var uid = q.query.uid;
 
   userVotes[uid] = url;
- // console.log('userVotes = ' + sys.inspect(userVotes));
+ // console.log('userVotes = ' + util.inspect(userVotes));
   setTimeout(work, 1);
 
   if (unvoteTimers.hasOwnProperty(uid)) {
