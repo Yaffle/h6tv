@@ -172,7 +172,6 @@ http.createServer(function (request, response) {
 
   if (request.url === '/iframe.html') {
     response.writeHead(200, {'Content-Type': 'text/html'});
-    response.connection.setTimeout(0); // this could take a while
     response.end(fs.readFileSync(__dirname + '/iframe.html', 'utf8'));
     return;
   }
@@ -196,6 +195,7 @@ http.createServer(function (request, response) {
       'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
       'Access-Control-Max-Age': '8640'
     });
+    response.connection.setTimeout(0); // this could take a while
     // 2 kb comment message for XDomainRequest
     response.write(':' + Array(2049).join(' ') + '\n');
     emitter.addListener('vlcEvent', sendMessages);
