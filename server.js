@@ -49,14 +49,15 @@ var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
 
 
-
 process.on('uncaughtException', function (e) {
   try {
     util.puts('Caught exception: ' + e + ' ' + (typeof(e) === 'object' ? e.stack : ''));
   } catch(e0) {}
 });
 
-
+setInterval(function () {
+  emitter.emit('ping');
+}, 5000);
 
 var emitter = new EventEmitter();
 var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
@@ -173,6 +174,9 @@ http.createServer(function (request, response) {
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
     }
+    function sendComment() {
+      response.write(':\n');//нужен комментарий раз в 15-30 секунд, чтобы соединение не прерывалось EventSource'ом
+    }
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -183,9 +187,11 @@ http.createServer(function (request, response) {
     // 2 kb comment message for XDomainRequest
     response.write(':' + Array(2049).join(' ') + '\n');
     emitter.addListener('vlcEvent', sendMessages);
+    emitter.addListener('ping', sendComment);
     emitter.setMaxListeners(0);
     response.socket.on('close', function () {
       emitter.removeListener('vlcEvent', sendMessages);
+      emitter.removeListener('ping', sendComment);
       response.end();
     });
     return;
