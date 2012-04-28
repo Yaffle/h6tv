@@ -183,7 +183,7 @@ http.createServer(function (request, response) {
       //'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Allow-Origin': 'http://' + request.headers.host
     });
-    response.connection.setTimeout(0); // this could take a while
+    //response.connection.setTimeout(0); // this could take a while
     // 2 kb comment message for XDomainRequest
     response.write(':' + Array(2049).join(' ') + '\n');
     emitter.addListener('vlcEvent', sendMessages);
