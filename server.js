@@ -169,19 +169,6 @@ function work() {
 var unvoteTimers = {};
 http.createServer(function (request, response) {
 
-
-  if (request.url === '/iframe.html') {
-    response.writeHead(200, {'Content-Type': 'text/html'});
-    response.end(fs.readFileSync(__dirname + '/iframe.html', 'utf8'));
-    return;
-  }
-  
-  if (request.url === '/eventsource.js') {
-    response.writeHead(200, {'Content-Type': 'text/javascript'});
-    response.end(fs.readFileSync(__dirname + '/eventsource.js', 'utf8'));
-    return;
-  }
-
   if (request.url === '/events') {
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
@@ -189,11 +176,8 @@ http.createServer(function (request, response) {
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
-      'Access-Control-Max-Age': '8640'
+      //'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Origin': 'http://' + request.headers.host
     });
     response.connection.setTimeout(0); // this could take a while
     // 2 kb comment message for XDomainRequest
