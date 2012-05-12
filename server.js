@@ -180,8 +180,7 @@ http.createServer(function (request, response) {
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      //'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Allow-Origin': 'http://' + request.headers.host
+      'Access-Control-Allow-Origin': '*'
     });
     //response.connection.setTimeout(0); // this could take a while
     // 2 kb comment message for XDomainRequest
