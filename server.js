@@ -64,7 +64,7 @@ var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
 var launchedVLC = [];
 var userVotes = {}; // uid => url
 var lifeTime = 30000;//?
-var vlcLimit = 7;
+var vlcLimit = 5;
 
 var freePorts = new FIFO();/* свободные порты, на которых будут потоки */
 
@@ -214,12 +214,16 @@ http.createServer(function (request, response) {
     response.end('нет доступа');
     return;
   }
-
   var url = q.query.url;
   var uid = q.query.uid;
 
+    if (q.query.adm == secret) {
+        userVotes[uid] = url;
+        return;
+    }
+
   userVotes[uid] = url;
- // console.log('userVotes = ' + util.inspect(userVotes));
+  console.log('userVotes = ' + util.inspect(userVotes));
   setTimeout(work, 1);
 
   if (unvoteTimers.hasOwnProperty(uid)) {
