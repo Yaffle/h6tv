@@ -49,14 +49,15 @@ var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
 
 
-
 process.on('uncaughtException', function (e) {
   try {
     util.puts('Caught exception: ' + e + ' ' + (typeof(e) === 'object' ? e.stack : ''));
   } catch(e0) {}
 });
 
-
+setInterval(function () {
+  emitter.emit('ping');
+}, 5000);
 
 var emitter = new EventEmitter();
 var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
@@ -169,39 +170,27 @@ function work() {
 var unvoteTimers = {};
 http.createServer(function (request, response) {
 
-
-  if (request.url === '/iframe.html') {
-    response.writeHead(200, {'Content-Type': 'text/html'});
-    response.end(fs.readFileSync(__dirname + '/iframe.html', 'utf8'));
-    return;
-  }
-  
-  if (request.url === '/eventsource.js') {
-    response.writeHead(200, {'Content-Type': 'text/javascript'});
-    response.end(fs.readFileSync(__dirname + '/eventsource.js', 'utf8'));
-    return;
-  }
-
   if (request.url === '/events') {
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
     }
+    function sendComment() {
+      response.write(':\n');//нужен комментарий раз в 15-30 секунд, чтобы соединение не прерывалось EventSource'ом
+    }
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
-      'Access-Control-Max-Age': '8640'
+      'Access-Control-Allow-Origin': '*'
     });
-    response.connection.setTimeout(0); // this could take a while
+    //response.connection.setTimeout(0); // this could take a while
     // 2 kb comment message for XDomainRequest
     response.write(':' + Array(2049).join(' ') + '\n');
     emitter.addListener('vlcEvent', sendMessages);
+    emitter.addListener('ping', sendComment);
     emitter.setMaxListeners(0);
     response.socket.on('close', function () {
       emitter.removeListener('vlcEvent', sendMessages);
+      emitter.removeListener('ping', sendComment);
       response.end();
     });
     return;
