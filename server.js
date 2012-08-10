@@ -1,9 +1,31 @@
 /*jslint sloppy: true, white: true, plusplus: true, maxerr: 50, indent: 2 */
 
+function FIFO() {
+  var head = null,
+      tail = null;
+
+  this.unshift = function (data) {
+    head = {
+      data: data,
+      next: head
+    };
+    (head.next || {}).prev = head;
+    tail = tail || head;
+  };
+
+  this.pop = function () {
+    var item = tail || {};
+    tail = item.prev;
+    (item.prev || {}).next = null;
+    head = tail && head;
+    return item.data;
+  };
+
+  return this;
+}
 
 /*
-
-перед тем как отдавать ссылку пользователю в tv1.php
+ перед тем как отдавать ссылку пользователю в tv1.php
  будем там получать ссылку на этот же поток, но для IP уже сервера iptv.hostel6.ru
  после этого делаем http-запрос из tv1.php с указанием идентификатора пользователя и ссылки на поток
  к node.js серверу
@@ -16,17 +38,10 @@
  а возвращать будешь ссылку на сжатый поток, либо пусто, если нет потока
 
  http://iptv.hostel6.ru/?secret=...&url=...&uid=...
-
-  !!! ВАЖНО !!!
-  под streamURL понимается ссылка на поток для сервера iptv.hostel6.ru, 
-  таким образом, streamURL идентифицирует поток!
-  
-  все потоки должны быть доступны этому серверу (для сжатия)
-
 */
 
 
-var sys = require('sys');
+var util = require('util');
 var http = require('http');
 var fs = require('fs');
 var querystring = require('querystring');
@@ -34,14 +49,15 @@ var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
 
 
-
 process.on('uncaughtException', function (e) {
   try {
-    sys.puts('Caught exception: ' + e + ' ' + (typeof(e) === 'object' ? e.stack : ''));
+    util.puts('Caught exception: ' + e + ' ' + (typeof(e) === 'object' ? e.stack : ''));
   } catch(e0) {}
 });
 
-
+setInterval(function () {
+  emitter.emit('ping');
+}, 5000);
 
 var emitter = new EventEmitter();
 var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
@@ -49,224 +65,171 @@ var secret = fs.readFileSync(__dirname + '/secret.txt', 'utf8').trim();
 var launchedVLC = [];
 var userVotes = {}; // uid => url
 var lifeTime = 30000;//?
-var vlcLimit = 6;
+var vlcLimit = 5;
 
-/* свободные порты, на которых будут потоки */
-var freePorts = (function (x, i) {
-  for (i = 20000; i < 20100; i++) {
-    x.push(i);
+var freePorts = new FIFO();/* свободные порты, на которых будут потоки */
+
+(function () {
+  var i;
+  for (i = 20001; i < 20100; i++) {
+    freePorts.unshift(i);
   }
-  return x;
-}([]));
-
-
-
-function startVLC(streamURL) {
-  var y = {
-    process: null,
-    url: streamURL
-  };
-  y.port = freePorts.pop();
-  y.outputURL = ':' + y.port;
-  launchedVLC.push(y);
-
-  sys.puts('launching vlc with url: ' + y.url);
-
-  y.process = spawn('cvlc', [
-    '--http-caching=1200',
-    '--sout-http-mime=video/mpeg',
-    '--sout',
-    '#transcode{vcodec=h264,vb=256,scale=0.5,acodec=mpga,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}',
-    y.url,
-    'vlc://quit'
-  ]);
-
-  emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
-  y.process.on('exit', function (code) {
-    var r = launchedVLC.indexOf(y);
-    if (r !== -1) {
-      launchedVLC.splice(r, 1);//удаляем из массива запущенных
-      emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL, close: 1});
-      freePorts.push(y.port);
-    }
-    console.log('child process exited with code ' + code);
-  });
-}
+}());
 
 
 // функция подсчета голосов за включение сжатия для каждого url + запуска VLC
 // будем запускать раз в 15 секунд
 function work() {
 
-  var results = [],  // results[i] = url + кол-во голосов
-      tmp = {};
-      
-// Добавляем уже запущенные потоки !!! (иначе не удалятся)
-  var prefix = '~~';
-  launchedVLC.forEach(function (x) {
-    userVotes[prefix + x.url] = x.url;
-  });
-
-  Object.keys(userVotes).forEach(function (uid) {
-    var url = userVotes[uid],
-        x = tmp[url];
-    if (!x) {
-      x = {
-        votes: 0,
+  var results = []; // results[i] = url + кол-во голосов
+  Object.keys(userVotes).forEach(function (vote) {
+    var url = userVotes[vote];
+    var c = results.filter(function (r) {
+      return r.url === url;
+    })[0];
+    if (!c) {
+      c = {
         url: url,
-        // child process or undefined if there is no process
-        vlc: launchedVLC.filter(function (x) {
-          return x.url == url;
-        })[0]
+        votes: 0
       };
-      tmp[url] = x;
-      results.push(x);
+      results[results.length] = c;
     }
-    if (uid.indexOf(prefix) !== 0) {
-      x.votes++;
-    }
+    c.votes++;
   });
 
-  launchedVLC.forEach(function (x) {
-    delete userVotes[prefix + x.url];
+  results.forEach(function (x) {
+    x.worksNow = false;
+    launchedVLC.forEach(function (y) {
+      x.worksNow = x.worksNow || y.url === x.url;
+    });
   });
 
+  
   /*
     сортируем по убыванию желающих посмотреть сжатый поток + приоритет тем потокам, которые уже показываются
   */
   results.sort(function (a, b) {
-    return (b.votes + 0.5 * (b.vlc ? 1 : 0)) - (a.votes + 0.5 * (a.vlc ? 1 : 0));
-  });
-
-  results.forEach(function (x, index) {
-    var play = index < vlcLimit;
-    if (x.vlc && !play) {
-      sys.puts('kill vlc with url: ' + x.url);
-      x.vlc.process.kill();
+    if (a.votes === b.votes) {
+      return a.worksNow && b.worksNow ? 0 /* ?? не должно быть 0 */ : (a.worksNow ? -1 : 1);
     }
-    if (!x.vlc && play) {
-      startVLC(x.url);
+    return b.votes - a.votes;
+  });
+  
+  // делаем из results массив ссылок
+  results = results.map(function (x) {
+    return x.url;
+  });
+
+  results = results.slice(0, vlcLimit);//!
+
+
+  // ненужные выключаем
+  launchedVLC = launchedVLC.filter(function (x) {
+    var r = results.indexOf(x.url);
+    if (r === -1) {
+      util.puts('kill vlc with url: ' + x.url);
+      x.process.kill();
+      emitter.emit('vlcEvent', {url: x.url, outputURL: x.outputURL, close: 1});
+      freePorts.unshift(x.port);//!? нужно ли освобождать здесь? в on('exit') уже, тем более здесь порт еще не свободен
+    } else {
+      results.splice(r, 1); // удаляем ссылку из массива, т.к. vlc уже запущен, нам не нужен еще один с таким же url
     }
+    return r !== -1;
   });
 
+  // results содержит VLC
+  while (launchedVLC.length < vlcLimit && results.length) {
+    var y = {
+      process: null,
+      url: results.pop()
+    };
+    y.port = freePorts.pop();
+    y.outputURL = ':' + y.port;
+    launchedVLC.push(y);
+    (function (y) {
+      util.puts('launching vlc with url: ' + y.url);
+//      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=576,width=360,height=288,acodec=mp4a,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
+      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=400,scale=0.5,acodec=mp4a,ab=64,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
+      emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
+      y.process.on('exit', function (code) {
+        var r = launchedVLC.indexOf(y);
+        if (r !== -1) {
+          launchedVLC.splice(r, 1);//удаляем из массива запущенных
+          emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL, close: 1});
+          freePorts.unshift(y.port);
+        }
+    //    console.log('child process exited with code ' + code);
+      });
+    }(y));
+
+  }
+
 }
 
-
-
-var config = '';
-try {
-  config = JSON.pasre(fs.readFileSync(__dirname + '/config.txt', 'utf8'));
-} catch (e) {}
-
-function mysqlEscape(st) {//needs test
-  //return String(st); //!
-  //backslashes  for  following characters: \x00, \n, \r, \, ', " and \x1a. 
-  return String(st).replace(/[\x00\n\r\\'"\x1a]/g, '\\$&');
-}
-
-function login(kuid, secondpass, callback) {
-  var db = require('mysql-native').createTCPClient('hostel6.ru:3306');
-  db.auto_prepare = true;
-  db.auth(config.dbName, config.dbUser, config.dbPassword);
-
-  db.query("SET CHARACTER SET utf8");
-  db.query("SET NAMES utf8");
-  db.query("SET CHARACTER_SET_RESULTS=utf8");
-
-  var qr = "SELECT uid FROM kpro_user LEFT JOIN kpro_usergroup USING (ugroup) WHERE ( uid='" + mysqlEscape(kuid) + "' AND secondpass=MD5('" + mysqlEscape((secondpass)) + "') ) LIMIT 1";
-  var rowsCount = 0;
-
-  db.query(qr).addListener('row', function (r) {
-    rowsCount++;
-  }).addListener('end', function () {
-    db.close();
-    callback(rowsCount);
-  });
-}
 
 var unvoteTimers = {};
 http.createServer(function (request, response) {
-  var q = require('url').parse(request.url, true);
 
-  if (request.url === '/iframe.html') {
-    response.writeHead(200, {'Content-Type': 'text/html'});
-    response.end(fs.readFileSync(__dirname + '/iframe.html', 'utf8'));
-    return;
-  }
-  
-  if (request.url === '/eventsource.js') {
-    response.writeHead(200, {'Content-Type': 'text/javascript'});
-    response.end(fs.readFileSync(__dirname + '/eventsource.js', 'utf8'));
-    return;
-  }
-
-  if (request.url.indexOf('/events') === 0) {
-    var streamURL = q.query.streamURL;
-    var wantsCompressed = q.query.wantsCompressed;
-
-    var cookies = {};
-    (req.headers.cookie || '').split(';').forEach(function (cookie) {
-      var parts = cookie.split('=');
-      cookies[decodeURIComponent(parts[0].trim())] = decodeURIComponent((parts[1] || '').trim());
-    });
-
-    var closed = false;
-    response.socket.on('close', function () {
-      closed = true;//!? может есть какой-то флаг у response текст готовый?
-    });
-
+  if (request.url === '/events') {
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
     }
-
-    login(cookies.kuid, cookies.secondpass || '', function (success) {
-      if (!success || closed) {
-        response.writeHead(403, {});//!
-        response.end();
-        return;
-      }
-
-      userVotes[uid] = streamURL;
-      console.log('userVotes = ' + sys.inspect(userVotes));
-      setTimeout(work, 1);
-      if (unvoteTimers.hasOwnProperty(uid)) {
-        clearTimeout(unvoteTimers[uid]);
-      }
-
-      response.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'X-Requested-With, Polling, Cache-Control, Last-Event-ID',
-        'Access-Control-Max-Age': '8640'
-      });
-
-      // 2 kb comment message for XDomainRequest
-      response.write(':' + Array(2049).join(' ') + '\n');    
-      launchedVLC.forEach(function (x) {
-        sendMessages({url: x.url, outputURL: x.outputURL});
-      });
-      emitter.addListener('vlcEvent', sendMessages);
-      emitter.setMaxListeners(0);
-      response.socket.on('close', function () {
-        emitter.removeListener('vlcEvent', sendMessages);
-        response.end();
-        unvoteTimers[uid] = setTimeout(function () {
-          delete unvoteTimers[uid];
-          delete userVotes[uid];
-          setTimeout(work, 1);
-        }, 3000);//lifeTime
-      });      
+    function sendComment() {
+      response.write(':\n');//нужен комментарий раз в 15-30 секунд, чтобы соединение не прерывалось EventSource'ом
+    }
+    response.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*'
     });
-
+    //response.connection.setTimeout(0); // this could take a while
+    // 2 kb comment message for XDomainRequest
+    response.write(':' + Array(2049).join(' ') + '\n');
+    emitter.addListener('vlcEvent', sendMessages);
+    emitter.addListener('ping', sendComment);
+    emitter.setMaxListeners(0);
+    response.socket.on('close', function () {
+      emitter.removeListener('vlcEvent', sendMessages);
+      emitter.removeListener('ping', sendComment);
+      response.end();
+    });
     return;
   }
 
-  response.writeHead(404, {'Content-Type': 'text/html'});
-  response.end('?');
-}).listen(8003);
+  var q = require('url').parse(request.url, true);
 
+  if (q.query.secret !== secret) {
+    response.writeHead(403, {'Content-Type': 'text/html'});
+    response.end('нет доступа');
+    return;
+  }
+  var url = q.query.url;
+  var uid = q.query.uid;
+
+    if (q.query.adm == secret) {
+        userVotes[uid] = url;
+        return;
+    }
+
+  userVotes[uid] = url;
+  console.log('userVotes = ' + util.inspect(userVotes));
+  setTimeout(work, 1);
+
+  if (unvoteTimers.hasOwnProperty(uid)) {
+    clearTimeout(unvoteTimers[uid]);
+  }
+  unvoteTimers[uid] = setTimeout(function () {
+    unvoteTimers[uid] = null;
+    delete userVotes[uid];
+    setTimeout(work, 1);
+  }, lifeTime);
+
+  response.writeHead(200, {'Content-Type': 'text/html'});
+  var s = launchedVLC.filter(function (r) {
+    return r.url === url;
+  })[0];
+  response.write(s ? s.outputURL : '');
+  response.end();
+}).listen(8003);
 
 console.log('server started!');
