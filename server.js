@@ -168,7 +168,8 @@ function work() {
 
 
 var unvoteTimers = {};
-http.createServer(function (request, response) {
+
+function onHttpConnection(request, response) {
 
   if (request.url === '/events') {
     function sendMessages(data) {
@@ -230,6 +231,20 @@ http.createServer(function (request, response) {
   })[0];
   response.write(s ? s.outputURL : '');
   response.end();
-}).listen(8003);
+}
+
+http.createServer(onHttpConnection).listen(8003);
+
+var path = require('path');
+path.exists(file, function(exists) {
+  if (exists) {
+    // serve file
+    spawn('certificate');
+  }
+  require('https').createServer({
+    key: fs.readFileSync('server-key.pem'),
+    cert: fs.readFileSync('server-cert.pem')
+  }, onHttpConnection).listen(8033);
+});
 
 console.log('server started!');
