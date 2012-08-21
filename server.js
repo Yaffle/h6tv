@@ -184,8 +184,14 @@ function onHttpConnection(request, response) {
       'Access-Control-Allow-Origin': '*'
     });
     //response.connection.setTimeout(0); // this could take a while
-    // 2 kb comment message for XDomainRequest
-    response.write(':' + Array(2049).join(' ') + '\n');
+
+    if ((request.headers.accept || '').indexOf('text/event-stream') === -1) {
+      // 2 kb comment message for XDomainRequest (IE8, IE9)
+      response.write(':' + Array(129).join('0123456789ABCDEF') + '\n');
+    } else {
+      response.write('\n\n'); // we should send something (for Opera - "\n\n")
+    }
+
     emitter.addListener('vlcEvent', sendMessages);
     emitter.addListener('ping', sendComment);
     emitter.setMaxListeners(0);
