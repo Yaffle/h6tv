@@ -47,6 +47,7 @@ var fs = require('fs');
 var querystring = require('querystring');
 var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
+var path = require('path');
 
 
 process.on('uncaughtException', function (e) {
@@ -241,16 +242,9 @@ function onHttpConnection(request, response) {
 
 http.createServer(onHttpConnection).listen(8003);
 
-var path = require('path');
-path.exists(file, function(exists) {
-  if (exists) {
-    // serve file
-    spawn('certificate');
-  }
   require('https').createServer({
     key: fs.readFileSync('server-key.pem'),
     cert: fs.readFileSync('server-cert.pem')
   }, onHttpConnection).listen(8033);
-});
 
 console.log('server started!');
