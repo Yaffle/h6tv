@@ -168,7 +168,8 @@ function work() {
 
 
 var unvoteTimers = {};
-http.createServer(function (request, response) {
+
+function onHttpConnection(request, response) {
 
   if (request.url === '/events') {
     function sendMessages(data) {
@@ -183,8 +184,14 @@ http.createServer(function (request, response) {
       'Access-Control-Allow-Origin': '*'
     });
     //response.connection.setTimeout(0); // this could take a while
-    // 2 kb comment message for XDomainRequest
-    response.write(':' + Array(2049).join(' ') + '\n');
+
+    if ((request.headers.accept || '').indexOf('text/event-stream') === -1) {
+      // 2 kb comment message for XDomainRequest (IE8, IE9)
+      response.write(':' + Array(129).join('0123456789ABCDEF') + '\n');
+    } else {
+      response.write('\n\n'); // we should send something (for Opera - "\n\n")
+    }
+
     emitter.addListener('vlcEvent', sendMessages);
     emitter.addListener('ping', sendComment);
     emitter.setMaxListeners(0);
@@ -230,6 +237,20 @@ http.createServer(function (request, response) {
   })[0];
   response.write(s ? s.outputURL : '');
   response.end();
-}).listen(8003);
+}
+
+http.createServer(onHttpConnection).listen(8003);
+
+var path = require('path');
+path.exists(file, function(exists) {
+  if (exists) {
+    // serve file
+    spawn('certificate');
+  }
+  require('https').createServer({
+    key: fs.readFileSync('server-key.pem'),
+    cert: fs.readFileSync('server-cert.pem')
+  }, onHttpConnection).listen(8033);
+});
 
 console.log('server started!');
