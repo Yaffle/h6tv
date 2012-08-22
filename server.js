@@ -149,7 +149,7 @@ function work() {
     (function (y) {
       util.puts('launching vlc with url: ' + y.url);
 //      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=576,width=360,height=288,acodec=mp4a,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
-      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=400,scale=0.5,acodec=mp4a,ab=64,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
+      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=400,scale=0.5,acodec=mp4a,ab=32,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
       emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
       y.process.on('exit', function (code) {
         var r = launchedVLC.indexOf(y);
