@@ -47,6 +47,7 @@ var fs = require('fs');
 var querystring = require('querystring');
 var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
+var path = require('path');
 
 
 process.on('uncaughtException', function (e) {
@@ -149,7 +150,7 @@ function work() {
     (function (y) {
       util.puts('launching vlc with url: ' + y.url);
 //      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=576,width=360,height=288,acodec=mp4a,ab=96,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
-      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=400,scale=0.5,acodec=mp4a,ab=64,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
+      y.process = spawn('cvlc', ['--sout-http-mime=video/mpeg','--http-caching=1200', '--sout', '#transcode{vcodec=h264,vb=400,scale=0.5,acodec=mp4a,ab=32,channels=2}:std{access=http,mux=ts,dst=:' + y.port + '}', y.url,'vlc://quit']);
       emitter.emit('vlcEvent', {url: y.url, outputURL: y.outputURL});
       y.process.on('exit', function (code) {
         var r = launchedVLC.indexOf(y);
@@ -252,16 +253,9 @@ function onHttpConnection(request, response) {
 
 http.createServer(onHttpConnection).listen(8003);
 
-var path = require('path');
-path.exists(file, function(exists) {
-  if (exists) {
-    // serve file
-    spawn('certificate');
-  }
   require('https').createServer({
     key: fs.readFileSync('server-key.pem'),
     cert: fs.readFileSync('server-cert.pem')
   }, onHttpConnection).listen(8033);
-});
 
 console.log('server started!');
