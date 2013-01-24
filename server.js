@@ -171,7 +171,18 @@ var unvoteTimers = {};
 
 function onHttpConnection(request, response) {
 
-  if (request.url === '/events') {
+  if (request.url.slice(0, "/events".length) === "/events") {
+    if (request.method === "OPTIONS") {
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET",
+        "Access-Control-Allow-Headers": "Last-Event-ID, Cache-Control",
+        "Access-Control-Max-Age": "86400"
+      });
+      response.end();
+      return;
+    }    
+
     function sendMessages(data) {
       response.write('data: ' + JSON.stringify(data) + '\n\n');
     }
